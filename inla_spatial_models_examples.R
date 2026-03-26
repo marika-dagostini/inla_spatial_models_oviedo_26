@@ -86,7 +86,8 @@ summary(m_iid)
 
 # besag ----
 m_besag = inla(
-  y ~ 1 + temp + pm25 + f(ID.area, model = "besag", graph = nb),
+  y ~ 1 + temp + pm25 + f(ID.area, model = "besag", 
+                          graph = nb, constr = TRUE),
   family = "poisson",
   data = nc,
   E = E,
@@ -102,7 +103,8 @@ moran.test(nc$pearson_besag, lw)
 
 # BYM ----
 m_bym = inla(
-  y ~ 1 + temp + pm25 + f(ID.area, model = "bym", graph = nb),
+  y ~ 1 + temp + pm25 + f(ID.area, model = "bym", 
+                          graph = nb, constr = TRUE),
   family = "poisson",
   data = nc,
   E = E,
@@ -114,7 +116,7 @@ summary(m_bym)
 
 # BYM2 ----
 m_bym2 = inla(
-  y ~ 1 + temp + pm25 + f(ID.area, model = "bym2", 
+  y ~ 1 + temp + pm25 + f(ID.area, model = "bym2", constr = TRUE,
                           graph = nb, scale.model = TRUE),
   family = "poisson",
   data = nc,
@@ -124,6 +126,14 @@ m_bym2 = inla(
 )
 
 summary(m_bym2)
+
+# random effects 
+
+nc$u_iid = m_iid$summary.random$ID.area$mean
+nc$u_besag = m_besag$summary.random$ID.area$mean
+nc$u_bym = m_bym$summary.random$ID.area$mean[(nrow(nc)+1):(nrow(nc)*2)]
+nc$u_bym2 = m_bym2$summary.random$ID.area$mean[(nrow(nc)+1):(nrow(nc)*2)]
+
 
 # -------------------------------------------------------- -
 # 5. Fit SVC models ----
@@ -211,7 +221,7 @@ p = ggplot(nc) +
     midpoint = 0
   ) +
   theme_void() +
-  labs(fill = expression(u[1]),
+  labs(fill = expression(v[1]),
        title = "Temperature")
 png(filename="dev_temp.png",
     width = 3000, height = 2600, units = "px", res=600)
@@ -226,12 +236,62 @@ p = ggplot(nc) +
     midpoint = 0
   ) +
   theme_void() +
-  labs(fill = expression(u[2]),
+  labs(fill = expression(v[2]),
        title = expression(PM[2.5]))
 png(filename="dev_pm25.png",
     width = 3000, height = 2600, units = "px", res=600)
 p
 dev.off()
+
+# MAPS random effects
+
+u_vars = c("u_iid", "u_besag", "u_bym", "u_bym2")
+u_labels = c(expression(u[i]- IID), expression(u[i]- Besag), expression(u[i]- BYM), expression(u[i]- BYM2))
+u_files = c("u-iid.png", "u-besag.png", "u-bym.png", "u-bym2.png")
+
+# common min and max for comparable scales across maps
+u_min = min(nc$u_iid, nc$u_besag, nc$u_bym, nc$u_bym2, na.rm = TRUE)
+u_max = max(nc$u_iid, nc$u_besag, nc$u_bym, nc$u_bym2, na.rm = TRUE)
+
+# plotting function
+make_rr_plot = function(data, fill_var, fill_label, rr_max) {
+  ggplot(data) +
+    geom_sf(aes(fill = .data[[fill_var]]), 
+            color = "white", linewidth = 0.2) +
+    scale_fill_viridis_c(option = "plasma", limits = c(u_min, u_max)) +
+    labs(fill = fill_label) +
+    theme_bw() +
+    theme(axis.title = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          panel.grid = element_blank(),
+          panel.background = element_rect(fill = "white", 
+                                          color = NA),
+          panel.border = element_blank(),
+          plot.background = element_rect(fill = "white", 
+                                         color = NA),
+          strip.text = element_text(size = 12, 
+                                    face = "bold", 
+                                    color = "black"),
+          strip.background = element_rect(fill = "grey80", 
+                                          color = "black", 
+                                          linewidth = 0.5),
+          legend.key.width = unit(0.5, "cm"),
+          plot.title = element_text(size = 10))
+}
+
+# loop 
+for (i in seq_along(u_vars)) {
+  p = make_rr_plot(data = nc,
+                   fill_var = u_vars[i],
+                   fill_label = u_labels[i],
+                   rr_max = u_max)
+  
+  png(filename = u_files[i], 
+      width = 3000, height = 2600, units = "px", res = 600)
+  print(p)
+  dev.off()
+}
 
 # MAPS RR
 
